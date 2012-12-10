@@ -612,17 +612,20 @@ function stk_msg_handler($errno, $msg_text, $errfile, $errline)
 		return;
 	}
 
+	if (!defined('E_DEPRECATED'))
+	{
+		define('E_DEPRECATED', 8192);
+	}
+
+	// Ignore Strict and Deprecated notices
+	if (in_array($errno, array(E_STRICT, E_DEPRECATED)))
+	{
+		return true;
+	}
+
 	// We encounter an error while in the ERK, this need some special treatment
 	if (defined('IN_ERK'))
 	{
-		// The toolkit kills itself when the ERK encounters an `E_STRICT` error,
-		// if thats the case catch the error and ignore. Otherwise call the
-		// phpBB handler
-		if (in_array($errno, array(E_STRICT, E_DEPRECATED)))
-		{
-			return true;
-		}
-
 		$critical_repair->trigger_error($msg_text, ($errno == E_USER_ERROR ? false : true));
 	}
 	else if (!defined('IN_STK'))
@@ -637,6 +640,11 @@ function stk_msg_handler($errno, $msg_text, $errfile, $errline)
 						 To run the ERK, click <a href="' . STK_ROOT_PATH . 'erk.php">here</a>.';
 		}
 
+		if (!isset($critical_repair))
+		{
+			$critical_repair = new critical_repair();
+		}
+
 		$critical_repair->trigger_error($msg_text, ($errno == E_USER_ERROR ? false : true));
 	}
 
@@ -649,11 +657,6 @@ function stk_msg_handler($errno, $msg_text, $errfile, $errline)
 	if (isset($msg_long_text) && $msg_long_text && !$msg_text)
 	{
 		$msg_text = $msg_long_text;
-	}
-
-	if (!defined('E_DEPRECATED'))
-	{
-		define('E_DEPRECATED', 8192);
 	}
 
 	switch ($errno)
