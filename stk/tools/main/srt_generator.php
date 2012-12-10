@@ -269,7 +269,7 @@ class srt_generator
 		));
 
 		// Spit out teh page
-		page_header(user_lang('SRT_GENERATOR'));
+		stk_page_header(user_lang('SRT_GENERATOR'));
 		
 		$template->set_filenames(array(
 			'body' => 'tools/srt_generator.html',

@@ -53,7 +53,7 @@ class manage_founders
 			'body' => 'tools/manage_founders.html',
 		));
 
-		page_header($user->lang['MANAGE_FOUNDERS'], false);
+		stk_page_header($user->lang['MANAGE_FOUNDERS'], false);
 		page_footer();
 	}
 

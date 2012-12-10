@@ -22,7 +22,7 @@ class profile_list
 	{
 		global $db, $template, $user;
 
-		page_header($user->lang['PROFILE_LIST']);
+		stk_page_header($user->lang['PROFILE_LIST']);
 
 		if (!class_exists('phpbb_db_tools'))
 		{
@@ -37,7 +37,7 @@ class profile_list
 		{
 			$uids = request_var('marked_user_id', array(0, 0));
 
-			if (confirm_box(true))
+			if (stk_confirm_box(true))
 			{
 				if (!function_exists('user_delete'))
 				{
@@ -55,7 +55,7 @@ class profile_list
 			else
 			{
 				$hidden = build_hidden_fields(array('marked_user_id' => $uids));
-				confirm_box(false, 'USERS_DELETE', $hidden, 'confirm_body.html', STK_DIR_NAME . '/index.' . PHP_EXT . '?c=admin&amp;t=profile_list&amp;sa=' . true);
+				stk_confirm_box(false, 'USERS_DELETE', $hidden, 'confirm_body.html', STK_DIR_NAME . '/index.' . PHP_EXT . '?c=admin&amp;t=profile_list&amp;sa=' . true);
 			}
 		}
 

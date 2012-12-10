@@ -35,7 +35,7 @@ define('PHPBB_MSG_HANDLER', 'stk_msg_handler');
 
 // Include all common stuff
 require(STK_ROOT_PATH . 'includes/functions.' . PHP_EXT);
-require(PHPBB_ROOT_PATH . 'common.' . PHP_EXT);
+require(STK_ROOT_PATH . 'phpbb_common.' . PHP_EXT);
 require(STK_ROOT_PATH . 'includes/plugin.' . PHP_EXT);
 // We test for UMIL twice. First look whether this user already has an UMIL installation in its default location.
 if (file_exists(PHPBB_ROOT_PATH . 'umil/umil.' . PHP_EXT))
@@ -56,7 +56,7 @@ if (!defined('IN_ERK'))
 
 	$user->session_begin();
 	$auth->acl($user->data);
-	$user->setup('acp/common', $config['default_style']);
+	$user->setup('acp/common');
 
 	$umil = new umil(true);
 }

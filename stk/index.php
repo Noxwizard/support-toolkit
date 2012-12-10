@@ -20,7 +20,7 @@ require STK_ROOT_PATH . 'common.' . PHP_EXT;
 // Setup the user
 $user->session_begin();
 $auth->acl($user->data);
-$user->setup('acp/common', $config['default_style']);
+$user->setup('acp/common');
 
 // Load UMIL
 $umil = new umil(true);
@@ -142,7 +142,7 @@ if ($stk_passwd !== false)
 				'S_STK_LOGIN_METHOD'	=> true,
 			));
 
-			page_header($user->lang['LOGIN'], false);
+			stk_page_header($user->lang['LOGIN'], false);
 
 			$template->set_filenames(array(
 				'body' => 'login_body.html',
@@ -172,7 +172,7 @@ else
 		$template->assign_var('GEN_PASS_FILE_EXPLAIN', sprintf($user->lang['GEN_PASS_FILE_EXPLAIN'], append_sid(STK_INDEX, array('action' => 'genpasswdfile'))));
 
 		// A user can potentially access this file directly
-		login_box('', $user->lang['STK_NON_LOGIN'], '', false, false);
+		stk_login_box('', $user->lang['STK_NON_LOGIN'], '', false, false);
 	}
 
 	// This requires that the user is logged in as an administrator (like how the ACP requires two logins)
@@ -181,7 +181,7 @@ else
 		// Proceed to ACP is misleading
 		$user->lang['PROCEED_TO_ACP'] = $user->lang['PROCEED_TO_STK'];
 
-		login_box('', $user->lang['STK_FOUNDER_ONLY'], $user->lang['LOGIN_STK_SUCCESS'], true, false);
+		stk_login_box('', $user->lang['STK_FOUNDER_ONLY'], $user->lang['LOGIN_STK_SUCCESS'], true, false);
 	}
 
 	// Only Board Founders may use the STK
@@ -294,7 +294,7 @@ if ($plugin->get_part('t'))
 
 		if (is_array($options) && isset($options['vars']))
 		{
-			page_header($user->lang[$options['title']]);
+			stk_page_header($user->lang[$options['title']]);
 
 			// Go through each error and see if the key exists in the $user->lang.  If it does, use that.
 			if (!empty($error))
@@ -371,13 +371,13 @@ if ($plugin->get_part('t'))
 		}
 		else if (is_string($options))
 		{
-			if (confirm_box(true))
+			if (stk_confirm_box(true))
 			{
 				$tool->run_tool();
 			}
 			else
 			{
-				confirm_box(false, $options, '', 'confirm_body.html', STK_DIR_NAME . '/index.' . PHP_EXT . $plugin->url_arg(true));
+				stk_confirm_box(false, $options, '', 'confirm_body.html', STK_DIR_NAME . '/index.' . PHP_EXT . $plugin->url_arg(true));
 			}
 		}
 		else
@@ -393,7 +393,7 @@ if ($plugin->get_part('t'))
 else
 {
 	// Output the main page
-	page_header($user->lang['SUPPORT_TOOL_KIT']);
+	stk_page_header($user->lang['SUPPORT_TOOL_KIT']);
 
 	// In de event the request category is empty force it to main.
 	if (!$plugin->get_part('c'))

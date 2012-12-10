@@ -166,7 +166,7 @@ class database_cleaner_views
 		));
 
 		// Do tha page
-		page_header(user_lang('DATABASE_CLEANER'), false);
+		stk_page_header(user_lang('DATABASE_CLEANER'), false);
 
 		$template->set_filenames(array(
 			'body' => 'tools/database_cleaner.html',

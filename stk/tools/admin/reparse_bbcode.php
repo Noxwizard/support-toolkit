@@ -330,6 +330,11 @@ class reparse_bbcode
 //		$this->_backup($batch);
 
 		// User object used to store a second user object used when parsing signatures. (#62451)
+		if (!class_exists('user'))
+		{
+			// Load the phpBB user class for any modifications to the keyoptions
+			include PHPBB_ROOT_PATH . 'includes/session.' . PHP_EXT;
+		}
 		$_user2 = new user();
 
 		// Walk through the batch

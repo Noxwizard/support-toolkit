@@ -274,7 +274,7 @@ class mysql_upgrader
 		));
 
 		// Output the result to the template
-		page_header(user_lang('MYSQL_UPGRADER'));
+		stk_page_header(user_lang('MYSQL_UPGRADER'));
 
 		$template->set_filenames(array(
 			'body' => 'tools/mysql_upgrader.html',

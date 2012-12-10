@@ -354,6 +354,318 @@ function stk_add_lang($lang_file, $fore_lang = false)
 	$user->lang_name = $lang_data['lang_name'];
 }
 
+// Message/Login boxes
+
+/**
+* Build Confirm box
+* @param boolean $check True for checking if confirmed (without any additional parameters) and false for displaying the confirm box
+* @param string $title Title/Message used for confirm box.
+*		message text is _CONFIRM appended to title.
+*		If title cannot be found in user->lang a default one is displayed
+*		If title_CONFIRM cannot be found in user->lang the text given is used.
+* @param string $hidden Hidden variables
+* @param string $html_body Template used for confirm box
+* @param string $u_action Custom form action
+*/
+function stk_confirm_box($check, $title = '', $hidden = '', $html_body = 'confirm_body.html', $u_action = '')
+{
+	global $user, $template, $db;
+	global $phpEx, $phpbb_root_path;
+
+	if (isset($_POST['cancel']))
+	{
+		return false;
+	}
+
+	$confirm = false;
+	if (isset($_POST['confirm']))
+	{
+		// language frontier
+		if ($_POST['confirm'] === $user->lang['YES'])
+		{
+			$confirm = true;
+		}
+	}
+
+	if ($check && $confirm)
+	{
+		$user_id = request_var('confirm_uid', 0);
+		$session_id = request_var('sess', '');
+		$confirm_key = request_var('confirm_key', '');
+
+		if ($user_id != $user->data['user_id'] || $session_id != $user->session_id || !$confirm_key || !$user->data['user_last_confirm_key'] || $confirm_key != $user->data['user_last_confirm_key'])
+		{
+			return false;
+		}
+
+		// Reset user_last_confirm_key
+		$sql = 'UPDATE ' . USERS_TABLE . " SET user_last_confirm_key = ''
+			WHERE user_id = " . $user->data['user_id'];
+		$db->sql_query($sql);
+
+		return true;
+	}
+	else if ($check)
+	{
+		return false;
+	}
+
+	$s_hidden_fields = build_hidden_fields(array(
+		'confirm_uid'	=> $user->data['user_id'],
+		'sess'			=> $user->session_id,
+		'sid'			=> $user->session_id,
+	));
+
+	// generate activation key
+	$confirm_key = gen_rand_string(10);
+
+	if (defined('IN_ADMIN') && isset($user->data['session_admin']) && $user->data['session_admin'])
+	{
+		adm_page_header((!isset($user->lang[$title])) ? $user->lang['CONFIRM'] : $user->lang[$title]);
+	}
+	else
+	{
+		stk_page_header(((!isset($user->lang[$title])) ? $user->lang['CONFIRM'] : $user->lang[$title]), false);
+	}
+
+	$template->set_filenames(array(
+		'body' => $html_body)
+	);
+
+	// If activation key already exist, we better do not re-use the key (something very strange is going on...)
+	if (request_var('confirm_key', ''))
+	{
+		// This should not occur, therefore we cancel the operation to safe the user
+		return false;
+	}
+
+	// re-add sid / transform & to &amp; for user->page (user->page is always using &)
+	$use_page = ($u_action) ? $phpbb_root_path . $u_action : $phpbb_root_path . str_replace('&', '&amp;', $user->page['page']);
+	$u_action = reapply_sid($use_page);
+	$u_action .= ((strpos($u_action, '?') === false) ? '?' : '&amp;') . 'confirm_key=' . $confirm_key;
+
+	$template->assign_vars(array(
+		'MESSAGE_TITLE'		=> (!isset($user->lang[$title])) ? $user->lang['CONFIRM'] : $user->lang[$title],
+		'MESSAGE_TEXT'		=> (!isset($user->lang[$title . '_CONFIRM'])) ? $title : $user->lang[$title . '_CONFIRM'],
+
+		'YES_VALUE'			=> $user->lang['YES'],
+		'S_CONFIRM_ACTION'	=> $u_action,
+		'S_HIDDEN_FIELDS'	=> $hidden . $s_hidden_fields)
+	);
+
+	$sql = 'UPDATE ' . USERS_TABLE . " SET user_last_confirm_key = '" . $db->sql_escape($confirm_key) . "'
+		WHERE user_id = " . $user->data['user_id'];
+	$db->sql_query($sql);
+
+	if (defined('IN_ADMIN') && isset($user->data['session_admin']) && $user->data['session_admin'])
+	{
+		adm_page_footer();
+	}
+	else
+	{
+		page_footer();
+	}
+}
+
+/**
+* Generate login box or verify password
+*/
+function stk_login_box($redirect = '', $l_explain = '', $l_success = '', $admin = false, $s_display = true)
+{
+	global $db, $user, $template, $auth, $phpEx, $phpbb_root_path, $config;
+
+	if (!class_exists('phpbb_captcha_factory'))
+	{
+		include($phpbb_root_path . 'includes/captcha/captcha_factory.' . $phpEx);
+	}
+
+	$err = '';
+
+	// Make sure user->setup() has been called
+	if (empty($user->lang))
+	{
+		$user->setup();
+	}
+
+	// Print out error if user tries to authenticate as an administrator without having the privileges...
+	if ($admin && !$auth->acl_get('a_'))
+	{
+		// Not authd
+		// anonymous/inactive users are never able to go to the ACP even if they have the relevant permissions
+		if ($user->data['is_registered'])
+		{
+			add_log('admin', 'LOG_ADMIN_AUTH_FAIL');
+		}
+		trigger_error('NO_AUTH_ADMIN');
+	}
+
+	if (isset($_POST['login']))
+	{
+		// Get credential
+		if ($admin)
+		{
+			$credential = request_var('credential', '');
+
+			if (strspn($credential, 'abcdef0123456789') !== strlen($credential) || strlen($credential) != 32)
+			{
+				if ($user->data['is_registered'])
+				{
+					add_log('admin', 'LOG_ADMIN_AUTH_FAIL');
+				}
+				trigger_error('NO_AUTH_ADMIN');
+			}
+
+			$password	= request_var('password_' . $credential, '', true);
+		}
+		else
+		{
+			$password	= request_var('password', '', true);
+		}
+
+		$username	= request_var('username', '', true);
+		$autologin	= (!empty($_POST['autologin'])) ? true : false;
+		$viewonline = (!empty($_POST['viewonline'])) ? 0 : 1;
+		$admin 		= ($admin) ? 1 : 0;
+		$viewonline = ($admin) ? $user->data['session_viewonline'] : $viewonline;
+
+		// Check if the supplied username is equal to the one stored within the database if re-authenticating
+		if ($admin && utf8_clean_string($username) != utf8_clean_string($user->data['username']))
+		{
+			// We log the attempt to use a different username...
+			add_log('admin', 'LOG_ADMIN_AUTH_FAIL');
+			trigger_error('NO_AUTH_ADMIN_USER_DIFFER');
+		}
+
+		// If authentication is successful we redirect user to previous page
+		$result = $auth->login($username, $password, $autologin, $viewonline, $admin);
+
+		// If admin authentication and login, we will log if it was a success or not...
+		// We also break the operation on the first non-success login - it could be argued that the user already knows
+		if ($admin)
+		{
+			if ($result['status'] == LOGIN_SUCCESS)
+			{
+				add_log('admin', 'LOG_ADMIN_AUTH_SUCCESS');
+			}
+			else
+			{
+				// Only log the failed attempt if a real user tried to.
+				// anonymous/inactive users are never able to go to the ACP even if they have the relevant permissions
+				if ($user->data['is_registered'])
+				{
+					add_log('admin', 'LOG_ADMIN_AUTH_FAIL');
+				}
+			}
+		}
+
+		// The result parameter is always an array, holding the relevant information...
+		if ($result['status'] == LOGIN_SUCCESS)
+		{
+			$redirect = request_var('redirect', "{$phpbb_root_path}index.$phpEx");
+			$message = ($l_success) ? $l_success : $user->lang['LOGIN_REDIRECT'];
+			$l_redirect = ($admin) ? $user->lang['PROCEED_TO_ACP'] : (($redirect === "{$phpbb_root_path}index.$phpEx" || $redirect === "index.$phpEx") ? $user->lang['RETURN_INDEX'] : $user->lang['RETURN_PAGE']);
+
+			// append/replace SID (may change during the session for AOL users)
+			$redirect = reapply_sid($redirect);
+
+			// Special case... the user is effectively banned, but we allow founders to login
+			if (defined('IN_CHECK_BAN') && $result['user_row']['user_type'] != USER_FOUNDER)
+			{
+				return;
+			}
+
+			$redirect = meta_refresh(3, $redirect);
+			trigger_error($message . '<br /><br />' . sprintf($l_redirect, '<a href="' . $redirect . '">', '</a>'));
+		}
+
+		// Something failed, determine what...
+		if ($result['status'] == LOGIN_BREAK)
+		{
+			trigger_error($result['error_msg']);
+		}
+
+		// Special cases... determine
+		switch ($result['status'])
+		{
+			case LOGIN_ERROR_ATTEMPTS:
+
+				$captcha = phpbb_captcha_factory::get_instance($config['captcha_plugin']);
+				$captcha->init(CONFIRM_LOGIN);
+				// $captcha->reset();
+
+				$template->assign_vars(array(
+					'CAPTCHA_TEMPLATE'			=> $captcha->get_template(),
+				));
+
+				$err = $user->lang[$result['error_msg']];
+			break;
+
+			case LOGIN_ERROR_PASSWORD_CONVERT:
+				$err = sprintf(
+					$user->lang[$result['error_msg']],
+					($config['email_enable']) ? '<a href="' . append_sid("{$phpbb_root_path}ucp.$phpEx", 'mode=sendpassword') . '">' : '',
+					($config['email_enable']) ? '</a>' : '',
+					($config['board_contact']) ? '<a href="mailto:' . htmlspecialchars($config['board_contact']) . '">' : '',
+					($config['board_contact']) ? '</a>' : ''
+				);
+			break;
+
+			// Username, password, etc...
+			default:
+				$err = $user->lang[$result['error_msg']];
+
+				// Assign admin contact to some error messages
+				if ($result['error_msg'] == 'LOGIN_ERROR_USERNAME' || $result['error_msg'] == 'LOGIN_ERROR_PASSWORD')
+				{
+					$err = (!$config['board_contact']) ? sprintf($user->lang[$result['error_msg']], '', '') : sprintf($user->lang[$result['error_msg']], '<a href="mailto:' . htmlspecialchars($config['board_contact']) . '">', '</a>');
+				}
+
+			break;
+		}
+	}
+
+	// Assign credential for username/password pair
+	$credential = ($admin) ? md5(unique_id()) : false;
+
+	$s_hidden_fields = array(
+		'sid'		=> $user->session_id,
+	);
+
+	if ($redirect)
+	{
+		$s_hidden_fields['redirect'] = $redirect;
+	}
+
+	if ($admin)
+	{
+		$s_hidden_fields['credential'] = $credential;
+	}
+
+	$s_hidden_fields = build_hidden_fields($s_hidden_fields);
+
+	$template->assign_vars(array(
+		'LOGIN_ERROR'		=> $err,
+		'LOGIN_EXPLAIN'		=> $l_explain,
+
+		'S_DISPLAY_FULL_LOGIN'	=> ($s_display) ? true : false,
+		'S_HIDDEN_FIELDS' 		=> $s_hidden_fields,
+
+		'S_ADMIN_AUTH'			=> $admin,
+		'USERNAME'				=> ($admin) ? $user->data['username'] : '',
+
+		'USERNAME_CREDENTIAL'	=> 'username',
+		'PASSWORD_CREDENTIAL'	=> ($admin) ? 'password_' . $credential : 'password',
+	));
+
+	stk_page_header($user->lang['LOGIN'], false);
+
+	$template->set_filenames(array(
+		'body' => 'login_body.html')
+	);
+
+	page_footer();
+}
+
 /**
  * Perform all quick tasks that has to be ran before we authenticate
  *
@@ -394,7 +706,7 @@ function perform_unauthed_quick_tasks($action, $submit = false)
 				if (false === $_version_number)
 				{
 					add_form_key('request_phpbb_version');
-					page_header($user->lang['REQUEST_PHPBB_VERSION'], false);
+					stk_page_header($user->lang['REQUEST_PHPBB_VERSION'], false);
 
 					// Grep the latest phpBB version number
 					$info = $umil->version_check('version.phpbb.com', '/phpbb', '30x.txt');
@@ -435,7 +747,7 @@ function perform_unauthed_quick_tasks($action, $submit = false)
 			$_pass_exprire = time() + 21600;
 
 			// Print a message and tell the user what to do and where to download this page
-			page_header($user->lang['GEN_PASS_FILE'], false);
+			stk_page_header($user->lang['GEN_PASS_FILE'], false);
 
 			$template->assign_vars(array(
 				'PASS_GENERATED'			=> sprintf($user->lang['PASS_GENERATED'], $_pass_string, $user->format_date($_pass_exprire, false, true)),
@@ -823,7 +1135,7 @@ function stk_msg_handler($errno, $msg_text, $errfile, $errline)
 				}
 				else
 				{
-					page_header($msg_title, false);
+					stk_page_header($msg_title, false);
 				}
 			}
 
@@ -981,4 +1293,121 @@ function stk_array_walk_keys(&$array, $callback)
 		unset($array[$key]);
 	}
 	$array = $tmp_array;
+}
+
+/**
+* Generate page header
+*/
+function stk_page_header($page_title = '', $display_online_list = true, $item_id = 0, $item = 'forum')
+{
+	global $db, $config, $template, $SID, $_SID, $_EXTRA_URL, $user, $auth, $phpEx, $phpbb_root_path;
+
+	if (defined('HEADER_INC'))
+	{
+		return;
+	}
+
+	define('HEADER_INC', true);
+
+	// gzip_compression
+	if ($config['gzip_compress'])
+	{
+		// to avoid partially compressed output resulting in blank pages in
+		// the browser or error messages, compression is disabled in a few cases:
+		//
+		// 1) if headers have already been sent, this indicates plaintext output
+		//    has been started so further content must not be compressed
+		// 2) the length of the current output buffer is non-zero. This means
+		//    there is already some uncompressed content in this output buffer
+		//    so further output must not be compressed
+		// 3) if more than one level of output buffering is used because we
+		//    cannot test all output buffer level content lengths. One level
+		//    could be caused by php.ini output_buffering. Anything
+		//    beyond that is manual, so the code wrapping phpBB in output buffering
+		//    can easily compress the output itself.
+		//
+		if (@extension_loaded('zlib') && !headers_sent() && ob_get_level() <= 1 && ob_get_length() == 0)
+		{
+			ob_start('ob_gzhandler');
+		}
+	}
+
+	// Generate logged in/logged out status
+	if ($user->data['user_id'] != ANONYMOUS)
+	{
+		$u_login_logout = append_sid("{$phpbb_root_path}ucp.$phpEx", 'mode=logout', true, $user->session_id);
+		$l_login_logout = sprintf($user->lang['LOGOUT_USER'], $user->data['username']);
+	}
+	else
+	{
+		$u_login_logout = append_sid("{$phpbb_root_path}ucp.$phpEx", 'mode=login');
+		$l_login_logout = $user->lang['LOGIN'];
+	}
+
+	// Determine board url - we may need it later
+	$board_url = generate_board_url() . '/';
+	$web_path = (defined('PHPBB_USE_BOARD_URL_PATH') && PHPBB_USE_BOARD_URL_PATH) ? $board_url : $phpbb_root_path;
+
+	// Which timezone?
+	$tz = ($user->data['user_id'] != ANONYMOUS) ? strval(doubleval($user->data['user_timezone'])) : strval(doubleval($config['board_timezone']));
+
+	// Send a proper content-language to the output
+	$user_lang = $user->lang['USER_LANG'];
+	if (strpos($user_lang, '-x-') !== false)
+	{
+		$user_lang = substr($user_lang, 0, strpos($user_lang, '-x-'));
+	}
+
+	// The following assigns all _common_ variables that may be used at any point in a template.
+	$template->assign_vars(array(
+		'SITENAME'						=> $config['sitename'],
+		'SITE_DESCRIPTION'				=> $config['site_desc'],
+		'PAGE_TITLE'					=> $page_title,
+		'SCRIPT_NAME'					=> str_replace('.' . $phpEx, '', $user->page['page_name']),
+		'CURRENT_TIME'					=> sprintf($user->lang['CURRENT_TIME'], $user->format_date(time(), false, true)),
+
+		'SID'				=> $SID,
+		'_SID'				=> $_SID,
+		'SESSION_ID'		=> $user->session_id,
+		'ROOT_PATH'			=> $phpbb_root_path,
+		'BOARD_URL'			=> $board_url,
+
+		'L_LOGIN_LOGOUT'	=> $l_login_logout,
+		'L_INDEX'			=> $user->lang['FORUM_INDEX'],
+
+		'U_LOGIN_LOGOUT'		=> $u_login_logout,
+		'U_INDEX'				=> append_sid("{$phpbb_root_path}index.$phpEx"),
+
+		'S_USER_LOGGED_IN'		=> ($user->data['user_id'] != ANONYMOUS) ? true : false,
+		'S_AUTOLOGIN_ENABLED'	=> ($config['allow_autologin']) ? true : false,
+		'S_BOARD_DISABLED'		=> ($config['board_disable']) ? true : false,
+		'S_REGISTERED_USER'		=> (!empty($user->data['is_registered'])) ? true : false,
+		'S_IS_BOT'				=> (!empty($user->data['is_bot'])) ? true : false,
+		'S_USER_LANG'			=> $user_lang,
+		'S_USERNAME'			=> $user->data['username'],
+		'S_CONTENT_DIRECTION'	=> $user->lang['DIRECTION'],
+		'S_CONTENT_FLOW_BEGIN'	=> ($user->lang['DIRECTION'] == 'ltr') ? 'left' : 'right',
+		'S_CONTENT_FLOW_END'	=> ($user->lang['DIRECTION'] == 'ltr') ? 'right' : 'left',
+		'S_CONTENT_ENCODING'	=> 'UTF-8',
+
+		'S_LOGIN_ACTION'		=> ((!defined('ADMIN_START')) ? append_sid("{$phpbb_root_path}ucp.$phpEx", 'mode=login') : append_sid("index.$phpEx", false, true, $user->session_id)),
+		'S_LOGIN_REDIRECT'		=> build_hidden_fields(array('redirect' => build_url())),
+
+		'A_COOKIE_SETTINGS'		=> addslashes('; path=' . $config['cookie_path'] . ((!$config['cookie_domain'] || $config['cookie_domain'] == 'localhost' || $config['cookie_domain'] == '127.0.0.1') ? '' : '; domain=' . $config['cookie_domain']) . ((!$config['cookie_secure']) ? '' : '; secure')),
+	));
+
+	// application/xhtml+xml not used because of IE
+	header('Content-type: text/html; charset=UTF-8');
+
+	header('Cache-Control: private, no-cache="set-cookie"');
+	header('Expires: 0');
+	header('Pragma: no-cache');
+
+	if (!empty($user->data['is_bot']))
+	{
+		// Let reverse proxies know we detected a bot.
+		header('X-PHPBB-IS-BOT: yes');
+	}
+
+	return;
 }

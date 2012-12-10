@@ -29,7 +29,7 @@ class erk
 
 		// This is kinda like the main page
 		// Output the main page
-		page_header($user->lang['SUPPORT_TOOL_KIT']);
+		stk_page_header($user->lang['SUPPORT_TOOL_KIT']);
 
 		// Category title and desc if available
 		$template->assign_vars(array(
